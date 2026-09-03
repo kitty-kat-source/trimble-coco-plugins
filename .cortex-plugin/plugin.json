@@ -1,0 +1,9 @@
+{
+  "name": "snowflake-loader",
+  "description": "Load local CSV files from your PC to a Snowflake table using SnowSQL PUT + COPY INTO",
+  "version": "1.0.0",
+  "author": {
+    "name": "Nalla Perumal",
+    "email": "nalla_perumal@trimble.com"
+  }
+}

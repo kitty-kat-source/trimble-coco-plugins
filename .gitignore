@@ -1,0 +1,23 @@
+# Python virtual environments (created by uv)
+.venv/
+venv/
+env/
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+
+# Credentials — NEVER commit these
+.env
+*.env
+*.secret
+*.key
+*.pem
+
+# OS noise
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+*.swp
