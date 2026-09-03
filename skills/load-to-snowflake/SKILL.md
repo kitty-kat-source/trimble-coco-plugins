@@ -44,7 +44,7 @@ Ask all 6 inputs using `ask_user_question`:
    (e.g. `C:\data\orders.csv, C:\data\customers.csv`)
 2. **Snowflake role** (default: `SYSADMIN`)
 3. **Warehouse** (default: `SMALL_WH`)
-4. **Target database** (default: `DEVRP`)
+4. **Target database** (default: `REVPROD`)
 5. **Target schema** (default: `REVPRO`)
 6. **Target stage name** — without the `@` (e.g. `MY_STAGE`)
 
@@ -216,8 +216,8 @@ Ready to load <N> file(s):
   ┌─────────────────────────────┬──────────────────────────────────┬──────────┬──────────┐
   │ File                        │ Target Table                     │ Size     │ PARALLEL │
   ├─────────────────────────────┼──────────────────────────────────┼──────────┼──────────┤
-  │ orders.csv                  │ DEVRP.REVPRO.ORDERS              │ 45.2 MB  │ 1        │
-  │ customers.csv               │ DEVRP.REVPRO.CUSTOMERS           │ 820.0 MB │ 5        │
+  │ orders.csv                  │ REVPROD.REVPRO.ORDERS            │ 45.2 MB  │ 1        │
+  │ customers.csv               │ REVPROD.REVPRO.CUSTOMERS         │ 820.0 MB │ 5        │
   └─────────────────────────────┴──────────────────────────────────┴──────────┴──────────┘
 
 Steps:
