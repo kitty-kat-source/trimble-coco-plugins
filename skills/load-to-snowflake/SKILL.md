@@ -165,36 +165,53 @@ contents and delimiter.
 
 ### Step 4: Map Each File to a Target Table
 
-**ALWAYS ask this step interactively — even if the user mentioned table names in
-their original request.** This confirms the mapping and prevents loading into
-the wrong table.
+**Auto-resolve table mappings from the filename's report code.** Only prompt
+interactively for files whose report code is not in the lookup table below.
 
-Ask all files at once in a single `ask_user_question` call, one question per
-file. For each question use this format:
+**How to resolve:** Split the bare filename on `_` and take the second segment
+(index 1) as the report code, uppercased.
+Example: `86790_ZMJER_86790_20260819_144722.csv` → code = `ZMJER`
 
-- `header`: the bare filename (e.g. `"RC_Booking_Detail.csv"`)
-- `question`: `"<filename> → which Snowflake table should this file load into?"`
-- `type`: `text`
-- `defaultValue`: filename without extension, uppercased
-  (e.g. `"RC_BOOKING_DETAIL"`)
+**Hardcoded report-code → table lookup:**
 
-Example for two files:
+| Report Code | Target Table                 | COPY INTO flags                                              |
+|-------------|------------------------------|--------------------------------------------------------------|
+| ZMJER       | RMS_MJE_CURR_PERIOD          | (standard)                                                   |
+| ZRCDR       | RMS_RCDR_CURR_PERIOD         | (standard)                                                   |
+| ZBILL       | RMS_BILL_CURR_PERIOD         | (standard)                                                   |
+| ZRCHR       | RMS_HOLD_RELEASE_CURR_PERIOD | (standard)                                                   |
+| ZRCRF       | RMS_RCRF_CURR_PERIOD         | ON_ERROR='CONTINUE'                                          |
+| ZACDR       | RMS_ACDR_CURR_PERIOD         | (standard)                                                   |
+| ZWF06       | RMS_WF06_CURR_PERIOD         | ERROR_ON_COLUMN_COUNT_MISMATCH=FALSE                         |
+| ZWF09       | RMS_WF09_CURR_PERIOD         | ERROR_ON_COLUMN_COUNT_MISMATCH=FALSE                         |
+| ZWF10       | RMS_WF10_CURR_PERIOD         | ERROR_ON_COLUMN_COUNT_MISMATCH=FALSE                         |
+| ZWF11       | RMS_WF11_CURR_PERIOD         | ERROR_ON_COLUMN_COUNT_MISMATCH=FALSE                         |
+| ZWF12       | RMS_WF12_CURR_PERIOD         | ERROR_ON_COLUMN_COUNT_MISMATCH=FALSE                         |
+| ZWF15       | RMS_WF15_CURR_PERIOD         | ERROR_ON_COLUMN_COUNT_MISMATCH=FALSE                         |
+| ZWF16       | RMS_WF16_CURR_PERIOD         | ERROR_ON_COLUMN_COUNT_MISMATCH=FALSE + ON_ERROR='CONTINUE'   |
+| ZWF17       | RMS_WF17_CURR_PERIOD         | ERROR_ON_COLUMN_COUNT_MISMATCH=FALSE                         |
+| ZWF18       | RMS_WF18_CURR_PERIOD         | ERROR_ON_COLUMN_COUNT_MISMATCH=FALSE                         |
+| ZWF19       | RMS_WF19_CURR_PERIOD         | ERROR_ON_COLUMN_COUNT_MISMATCH=FALSE                         |
+| ZWF20       | RMS_WF20_CURR_PERIOD         | ERROR_ON_COLUMN_COUNT_MISMATCH=FALSE                         |
+| ZWF21       | RMS_WF21_CURR_PERIOD         | ERROR_ON_COLUMN_COUNT_MISMATCH=FALSE                         |
+
+**All files:** Always add `REPLACE_INVALID_CHARACTERS=TRUE` to the FILE_FORMAT
+(Zuora exports contain Latin-1 characters that are invalid UTF-8).
+
+**Resolution logic per file:**
+1. Extract report code from filename (second `_`-delimited segment, uppercased)
+2. If code is in the lookup table → auto-assign the table and COPY INTO flags;
+   do NOT ask the user for this file
+3. If code is NOT in the lookup table → ask the user interactively via
+   `ask_user_question` with `defaultValue` = filename without extension, uppercased
+
+Only ask `ask_user_question` if one or more files could not be auto-resolved.
+If all files resolved automatically, skip Step 4 entirely (no question asked).
+
+Build a mapping that records table name AND copy flags for each file:
 ```
-Question 1
-  header       : "RC_Booking_Detail.csv"
-  question     : "RC_Booking_Detail.csv → which Snowflake table should this file load into?"
-  defaultValue : "RC_BOOKING_DETAIL"
-
-Question 2
-  header       : "Revpro_Waterfall_Source_Data_ZWF15.csv"
-  question     : "Revpro_Waterfall_Source_Data_ZWF15.csv → which Snowflake table should this file load into?"
-  defaultValue : "REVPRO_WATERFALL_SOURCE_DATA_ZWF15"
-```
-
-Build a mapping from the answers:
-```
-file_list[0] → TABLE_A
-file_list[1] → TABLE_B
+file_list[0] → { table: "RMS_RCDR_CURR_PERIOD", flags: [] }
+file_list[1] → { table: "RMS_WF15_CURR_PERIOD", flags: ["ERROR_ON_COLUMN_COUNT_MISMATCH=FALSE"] }
 ...
 ```
 
@@ -423,12 +440,15 @@ Assign files to subagents:
 - 4+ files → 3 subagents (distribute round-robin)
 
 Each subagent prompt must contain:
-- The COPY INTO SQL for its assigned file(s):
+- The COPY INTO SQL for its assigned file(s), using the flags from the Step 4
+  mapping for each file:
   ```sql
   COPY INTO <DATABASE>.<SCHEMA>.<TABLE>
   FROM @<STAGE_NAME>/<FILENAME>.gz
-  FILE_FORMAT = (TYPE='CSV' SKIP_HEADER=1 FIELD_OPTIONALLY_ENCLOSED_BY='"' EMPTY_FIELD_AS_NULL=TRUE)
-  ON_ERROR = 'ABORT_STATEMENT';
+  FILE_FORMAT = (TYPE='CSV' SKIP_HEADER=1 FIELD_OPTIONALLY_ENCLOSED_BY='"'
+                 EMPTY_FIELD_AS_NULL=TRUE REPLACE_INVALID_CHARACTERS=TRUE
+                 [ERROR_ON_COLUMN_COUNT_MISMATCH=FALSE  -- if ZWF* file])
+  ON_ERROR = '<ABORT_STATEMENT or CONTINUE per Step 4 flags>';
   ```
 - Instruction to run each SQL via `snowflake_sql_execute`
 - Instruction to capture `loaded_at` timestamp before each COPY INTO
@@ -461,9 +481,17 @@ FILE_FORMAT = (
     SKIP_HEADER = 1
     FIELD_OPTIONALLY_ENCLOSED_BY = '"'
     EMPTY_FIELD_AS_NULL = TRUE
+    REPLACE_INVALID_CHARACTERS = TRUE
 )
-ON_ERROR = 'ABORT_STATEMENT';
+ON_ERROR = '<ON_ERROR_VALUE>';
 ```
+
+Where:
+- `<ON_ERROR_VALUE>` = `'CONTINUE'` if the file's flags include `ON_ERROR='CONTINUE'`
+  (ZRCRF, ZWF16), otherwise `'ABORT_STATEMENT'`
+- Append `ERROR_ON_COLUMN_COUNT_MISMATCH = FALSE` to the FILE_FORMAT block if the
+  file's flags include that flag (all ZWF* files)
+- `REPLACE_INVALID_CHARACTERS = TRUE` is always included (all Zuora exports)
 
 - `<FILENAME>` is the bare filename as it appears on the stage (SnowSQL adds
   `.gz` after compression — use `<filename>.gz` if AUTO_COMPRESS=TRUE was used)
